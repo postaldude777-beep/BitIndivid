@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#4caf50">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>🌿 Подбор рецептов</title>
+  <style>
+    :root { --bg: #f4f9f4; --card: #fff; --primary: #4caf50; --text: #2c3e50; --light: #607d8b; --warn: #e53935; --ok: #2e7d32; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); padding: 16px; line-height: 1.5; }
+    .container { max-width: 800px; margin: 0 auto; background: var(--card); padding: 20px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+    h1 { text-align: center; color: var(--ok); margin-bottom: 20px; font-size: 22px; }
+    .controls { display: grid; gap: 12px; margin-bottom: 20px; }
+    textarea { width: 100%; padding: 14px; border: 1px solid #e0e0e0; border-radius: 12px; font-size: 16px; background: #fafafa; resize: vertical; }
+    textarea:focus { outline: none; border-color: var(--primary); background: #fff; }
+    button { background: var(--primary); color: #fff; border: none; padding: 16px; border-radius: 12px; font-size: 17px; cursor: pointer; min-height: 48px; }
+    button:hover { background: #388e3c; }
+    button:disabled { background: #a5d6a7; cursor: not-allowed; }
+    .card { border: 1px solid #e0e0e0; border-radius: 14px; padding: 16px; margin-bottom: 14px; background: #fafafa; }
+    .title { font-size: 18px; color: var(--ok); font-weight: 600; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+    .badge { font-size: 12px; padding: 4px 8px; border-radius: 12px; background: #e8f5e9; color: var(--ok); }
+    .kbzu { background: #e8f5e9; padding: 10px; border-radius: 10px; margin: 8px 0; font-size: 14px; font-weight: 500; }
+    .ing { margin: 10px 0; padding-left: 20px; font-size: 14px; color: var(--light); }
+    .ing li { margin-bottom: 4px; }
+    .missing { color: var(--warn); font-weight: 500; margin-top: 8px; font-size: 14px; }
+    .history { margin-top: 24px; padding-top: 14px; border-top: 2px solid #e0e0e0; }
+    .history h3 { margin-bottom: 10px; color: var(--light); font-size: 15px; }
+    .tag { display: inline-block; background: #e8f5e9; color: var(--ok); padding: 8px 12px; border-radius: 20px; margin: 4px; font-size: 13px; cursor: pointer; }
+    .tag:hover { background: var(--primary); color: #fff; }
+    .empty { text-align: center; color: var(--light); padding: 30px 0; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🌿 Подбор рецептов</h1>
+    <div class="controls">
+      <textarea id="input" rows="3" placeholder="Продукты через запятую (курица, рис, морковь)"></textarea>
+      <button id="btn" disabled>⏳ Загрузка базы...</button>
+    </div>
+    <div id="results"></div>
+    <div class="history">
+      <h3>📜 История поиска</h3>
+      <div id="histList"></div>
+    </div>
+  </div>
+
+  <script>
+    const MATCH_THRESHOLD = 0.7;
+    let ingDict = [];
+    let recipes = [];
+    let isReady = false;
+    const btn = document.getElementById('btn');
+    const res = document.getElementById('results');
+
+    fetch('./recipes.json')
+      .then(r => r.ok ? r.json() : Promise.reject('recipes.json не найден'))
+      .then(data => {
+        ingDict = data.d;
+        recipes = data.r;
+        isReady = true;
+        btn.disabled = false;
+        btn.textContent = '🔍 Найти рецепты';
+        btn.style.opacity = '1';
+        renderHistory();
+        console.log(`✅ Загружено: ${recipes.length} рецептов, ${ingDict.length} ингредиентов`);
+      })
+      .catch(err => res.innerHTML = `<div class="empty">⚠️ Ошибка: ${err.message}</div>`);
+
+    const norm = s => s.toLowerCase().replace(/[^а-яёa-z0-9\s]/g, '').trim();
+    const fuzzy = (q, t) => {
+      const a=norm(q), b=norm(t);
+      if(!a||!b) return false;
+      if(a===b || b.includes(a) || a.includes(b)) return true;
+      if(a.length>=4 && b.includes(a.substring(0,4))) return true;
+      if(a.length<=15) {
+        const m=a.length, n=b.length, dp=Array(m+1).fill().map(()=>Array(n+1).fill(0));
+        for(let i=0;i<=m;i++) dp[i][0]=i;
+        for(let j=0;j<=n;j++) dp[0][j]=j;
+        for(let i=1;i<=m;i++) for(let j=1;j<=n;j++) dp[i][j]=Math.min(dp[i-1][j]+1, dp[i][j-1]+1, dp[i-1][j-1]+(a[i-1]===b[j-1]?0:1));
+        return dp[m][n]/Math.max(m,n) <= 0.3;
+      }
+      return false;
+    };
+
+    const getKBZU = name => window.kbzu?.find(i => fuzzy(name, i.name)) || {kcal:0,prot:0,fat:0,carb:0};
+    
+    // Загрузка КБЖУ параллельно
+    fetch('./kbzu.json').then(r => r.ok ? r.json() : Promise.reject()).then(k => window.kbzu = k).catch(()=>window.kbzu=[]);
+
+    const calcKBZU = ings => {
+      let tc=0,tp=0,tf=0,tcb=0,tw=0;
+      ings.forEach(([idx, g]) => {
+        const k = getKBZU(ingDict[idx]);
+        const w = g || 100;
+        tc+=k.kcal*w/100; tp+=k.prot*w/100; tf+=k.fat*w/100; tcb+=k.carb*w/100; tw+=w;
+      });
+      return tw===0 ? {kcal:0,prot:0,fat:0,carb:0} : {kcal:Math.round(tc/tw*100), prot:Math.round(tp/tw*100), fat:Math.round(tf/tw*100), carb:Math.round(tcb/tw*100)};
+    };
+
+    window.findRecipes = () => {
+      if(!isReady) return;
+      const raw = document.getElementById('input').value;
+      const user = raw.split(',').map(s=>s.trim()).filter(Boolean);
+      if(!user.length) return alert('Введите продукты!');
+
+      const found = recipes.filter(r => {
+        const m = r.i.filter(([idx]) => user.some(u => fuzzy(u, ingDict[idx]))).length;
+        return m / r.i.length >= MATCH_THRESHOLD;
+      }).sort((a,b) => (b.i.filter(([i])=>user.some(u=>fuzzy(u,ingDict[i]))).length/b.i.length) - (a.i.filter(([i])=>user.some(u=>fuzzy(u,ingDict[i]))).length/a.i.length));
+
+      render(found, user); saveHistory(raw);
+    };
+
+    const render = (list, user) => {
+      res.innerHTML = '';
+      if(!list.length) { res.innerHTML = '<div class="empty">😔 Ничего не найдено.</div>'; return; }
+      list.forEach(r => {
+        const k = calcKBZU(r.i);
+        const miss = r.i.filter(([idx]) => !user.some(u => fuzzy(u, ingDict[idx])));
+        const pct = Math.round(((r.i.length - miss.length)/r.i.length)*100);
+        const el = document.createElement('div'); el.className = 'card';
+        el.innerHTML = `
+          <div class="title">${formatName(r.n)} <span class="badge">${pct}%</span></div>
+          <div class="kbzu">📊 КБЖУ на 100г: ${k.kcal} ккал | Б:${k.prot} Ж:${k.fat} У:${k.carb}</div>
+          <ul class="ing">${r.i.map(([idx,g])=>`<li><b>${ingDict[idx]}</b> — ${g}г</li>`).join('')}</ul>
+          ${miss.length ? `<div class="missing">⚠️ Не хватает: ${miss.map(([i])=>ingDict[i]).join(', ')}</div>` : '<div style="color:var(--ok);font-weight:500;margin-top:8px">✅ Всё есть</div>'}
+        `;
+        res.appendChild(el);
+      });
+    };
+
+    const formatName = s => s.replace(/-/g,' ').replace(/\d+$/,'').replace(/\b\w/g,c=>c.toUpperCase()).trim();
+
+    const saveHistory = q => {
+      let h = JSON.parse(localStorage.getItem('rhist')||'[]');
+      h = h.filter(x=>x!==q).slice(0,10); h.unshift(q);
+      localStorage.setItem('rhist', JSON.stringify(h)); renderHistory();
+    };
+    const renderHistory = () => {
+      const el = document.getElementById('histList');
+      const h = JSON.parse(localStorage.getItem('rhist')||'[]');
+      el.innerHTML = h.length ? h.map(q=>`<span class="tag" onclick="document.getElementById('input').value='${q.replace(/'/g,"\\'")}';window.findRecipes()">${q.substring(0,25)}${q.length>25?'...':''}</span>`).join('') : '<span style="color:var(--light);font-size:13px">История пуста</span>';
+    };
+
+    btn.addEventListener('click', window.findRecipes);
+    document.getElementById('input').addEventListener('keydown', e => { if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();window.findRecipes();} });
+    renderHistory();
+  </script>
+</body>
+</html>
