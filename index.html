@@ -115,12 +115,10 @@
         }
         return false;
       };
-      const calcKBZU = (recipe) => {
-        let tC=0, tP=0, tF=0, tCb=0, tW=0;
-        recipe.ingredients.forEach(i => {
-          tC += (i.cal * i.weight_g)/100; tP += (i.prot * i.weight_g)/100;
-          tF += (i.fat * i.weight_g)/100; tCb += (i.carb * i.weight_g)/100; tW += i.weight_g;
-        });
+      const getNutrition = (name) => {
+  const found = ingredientsDB.find(i => fuzzyMatch(name, i.name));
+  return found || { cal: 0, prot: 0, fat: 0, carb: 0 };
+};
         return { cal: Math.round((tC/tW)*100), prot: Math.round((tP/tW)*100), fat: Math.round((tF/tW)*100), carb: Math.round((tCb/tW)*100) };
       };
 
