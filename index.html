@@ -30,7 +30,7 @@
     .tag { display: inline-block; background: #e8f5e9; color: var(--ok); padding: 8px 12px; border-radius: 20px; margin: 4px; font-size: 13px; cursor: pointer; }
     .tag:hover { background: var(--primary); color: #fff; }
     .empty { text-align: center; color: var(--light); padding: 30px 0; }
-    .debug { background: #fff3cd; padding: 10px; border-radius: 8px; margin-bottom: 15px; font-size: 12px; color: #856404; display: none; }
+    .debug { background: #e3f2fd; padding: 10px; border-radius: 8px; margin-bottom: 15px; font-size: 11px; color: #1565c0; display: none; max-height: 150px; overflow: auto; }
   </style>
 </head>
 <body>
@@ -58,136 +58,149 @@
     const res = document.getElementById('results');
     const debugBox = document.getElementById('debugBox');
 
-    // ⚡ Легковесная очистка рецептов (без рекурсии, мгновенно)
-    const parseRecipes = (data) => {
-      if (!data.d || !data.r) throw new Error('Неверная структура recipes.json');
-      ingDict = data.d.map(s => String(s).trim()).filter(Boolean);
-      recipes = data.r.map(rec => ({
-        n: String(rec.n || '').trim(),
-        i: (rec.i || []).map(([idx, g]) => [idx, g || 0])
-      }));
-      console.log(`📦 Рецепты: ${recipes.length} шт., Ингредиентов: ${ingDict.length}`);
-    };
-
-    // ⚡ Легковесная очистка КБЖУ (игнорирует пробелы в ключах)
-    const parseKbzu = (data) => {
-      if (!Array.isArray(data)) throw new Error('kbzu.json должен быть массивом');
-      return data.map(obj => {
-        let name = '', kcal=0, prot=0, fat=0, carb=0;
-        for (const [key, val] of Object.entries(obj)) {
-          const k = key.trim();
-          const v = String(val).trim();
-          if (k === 'name') name = v;
-          else if (k === 'kcal') kcal = parseFloat(v) || 0;
-          else if (k === 'prot') prot = parseFloat(v) || 0;
-          else if (k === 'fat') fat = parseFloat(v) || 0;
-          else if (k === 'carb') carb = parseFloat(v) || 0;
+    const trimAll = obj => {
+      if (Array.isArray(obj)) return obj.map(trimAll);
+      if (obj && typeof obj === 'object') {
+        const out = {};
+        for (const [k, v] of Object.entries(obj)) {
+          const key = String(k).trim();
+          const val = typeof v === 'string' ? v.trim() : v;
+          out[key] = val;
         }
-        return { name, kcal, prot, fat, carb };
-      }).filter(i => i.name);
+        return out;
+      }
+      return obj;
     };
 
-    // Загрузка данных с явной обработкой ошибок
-    console.time('⏱️ Загрузка данных');
+    console.time('📥 Load');
     Promise.all([
-      fetch('./recipes.json').then(r => r.ok ? r.json() : Promise.reject(`recipes.json: HTTP ${r.status}`)),
-      fetch('./kbzu.json').then(r => r.ok ? r.json() : Promise.reject(`kbzu.json: HTTP ${r.status}`))
+      fetch('./recipes.json').then(r => r.ok ? r.json() : Promise.reject(`recipes.json: ${r.status}`)),
+      fetch('./kbzu.json').then(r => r.ok ? r.json() : Promise.reject(`kbzu.json: ${r.status}`))
     ])
     .then(([recData, kbzData]) => {
-      parseRecipes(recData);
-      kbzuDB = parseKbzu(kbzData);
-      console.log(`📊 КБЖУ: ${kbzuDB.length} позиций`);
+      // Полная очистка данных от пробелов
+      recData = trimAll(recData);
+      kbzData = trimAll(kbzData);
+
+      if (!recData.d || !recData.r) throw new Error('Неверная структура recipes.json');
+      
+      ingDict = recData.d.map(s => String(s).trim()).filter(Boolean);
+      recipes = recData.r.map(r => ({
+        n: String(r.n || '').trim(),
+        i: (r.i || []).map(([idx, g]) => [idx, g || 0])
+      }));
+
+      kbzuDB = kbzData.filter(i => i.name).map(i => ({
+        name: String(i.name).trim(),
+        kcal: parseFloat(i.kcal) || 0,
+        prot: parseFloat(i.prot) || 0,
+        fat: parseFloat(i.fat) || 0,
+        carb: parseFloat(i.carb) || 0
+      }));
 
       isReady = true;
       btn.disabled = false;
       btn.textContent = '🔍 Найти рецепты';
-      btn.style.opacity = '1';
       
+      const log = `✅ Загружено: ${recipes.length} рецептов | ${ingDict.length} ингредиентов | ${kbzuDB.length} КБЖУ`;
+      debugBox.textContent = log;
       debugBox.style.display = 'block';
-      debugBox.textContent = `✅ Готово! ${recipes.length} рецептов загружены`;
-      console.timeEnd('⏱️ Загрузка данных');
+      console.log(log);
+      console.log('🔍 Примеры ингредиентов:', ingDict.slice(0, 10));
+      console.timeEnd('📥 Load');
       renderHistory();
     })
     .catch(err => {
-      console.error('❌ Ошибка загрузки:', err);
-      res.innerHTML = `<div class="empty">⚠️ Ошибка: ${err.message}<br><small>Проверьте F12 → Console</small></div>`;
-      debugBox.style.display = 'block';
+      console.error('❌ Load error:', err);
       debugBox.textContent = `❌ ${err.message}`;
-      btn.textContent = '⚠️ Ошибка загрузки';
+      debugBox.style.display = 'block';
+      res.innerHTML = `<div class="empty">⚠️ ${err.message}</div>`;
     });
 
     const norm = s => String(s).toLowerCase().replace(/[^а-яёa-z0-9\s]/g, '').trim();
+    
     const fuzzy = (q, t) => {
       const a = norm(q), b = norm(t);
       if (!a || !b) return false;
-      if (a === b || b.includes(a) || a.includes(b)) return true;
-      if (a.length >= 4 && b.includes(a.substring(0, 4))) return true;
-      if (a.length <= 15) {
-        const m = a.length, n = b.length, dp = Array(m + 1).fill().map(() => Array(n + 1).fill(0));
-        for (let i = 0; i <= m; i++) dp[i][0] = i;
-        for (let j = 0; j <= n; j++) dp[0][j] = j;
-        for (let i = 1; i <= m; i++) for (let j = 1; j <= n; j++) {
-          dp[i][j] = Math.min(dp[i-1][j]+1, dp[i][j-1]+1, dp[i-1][j-1] + (a[i-1]===b[j-1]?0:1));
+      if (a === b) return true;
+      if (b.includes(a) || a.includes(b)) return true;
+      if (a.length >= 3 && b.includes(a.substring(0, 3))) return true;
+      if (a.length <= 12) {
+        const m = a.length, n = b.length, dp = Array(m+1).fill().map(()=>Array(n+1).fill(0));
+        for(let i=0;i<=m;i++) dp[i][0]=i;
+        for(let j=0;j<=n;j++) dp[0][j]=j;
+        for(let i=1;i<=m;i++) for(let j=1;j<=n;j++) {
+          dp[i][j] = Math.min(dp[i-1][j]+1, dp[i][j-1]+1, dp[i-1][j-1]+(a[i-1]===b[j-1]?0:1));
         }
-        return dp[m][n] / Math.max(m, n) <= 0.35;
+        return dp[m][n]/Math.max(m,n) <= 0.4;
       }
       return false;
     };
 
-    const getKBZU = (name) => kbzuDB.find(i => fuzzy(name, i.name)) || {kcal:0, prot:0, fat:0, carb:0};
+    const getKBZU = name => kbzuDB.find(i => fuzzy(name, i.name)) || {kcal:0,prot:0,fat:0,carb:0};
 
-    const calcKBZU = (ings) => {
-      let tc=0, tp=0, tf=0, tcb=0, tw=0;
-      ings.forEach(([idx, g]) => {
-        const ingName = ingDict[idx];
-        if (!ingName) return;
-        const k = getKBZU(ingName);
-        const w = g || 100;
-        tc += k.kcal*w/100; tp += k.prot*w/100; tf += k.fat*w/100; tcb += k.carb*w/100; tw += w;
+    const calcKBZU = ings => {
+      let tc=0,tp=0,tf=0,tcb=0,tw=0;
+      ings.forEach(([idx,g]) => {
+        const nm = ingDict[idx]; if(!nm) return;
+        const k = getKBZU(nm); const w = g||100;
+        tc+=k.kcal*w/100; tp+=k.prot*w/100; tf+=k.fat*w/100; tcb+=k.carb*w/100; tw+=w;
       });
-      return tw === 0 ? {kcal:0,prot:0,fat:0,carb:0} : {
-        kcal: Math.round(tc/tw*100), prot: Math.round(tp/tw*100),
-        fat: Math.round(tf/tw*100), carb: Math.round(tcb/tw*100)
+      return tw===0 ? {kcal:0,prot:0,fat:0,carb:0} : {
+        kcal:Math.round(tc/tw*100), prot:Math.round(tp/tw*100),
+        fat:Math.round(tf/tw*100), carb:Math.round(tcb/tw*100)
       };
     };
 
     window.findRecipes = () => {
-      if (!isReady) return;
+      if(!isReady) return;
       const raw = document.getElementById('input').value;
-      const user = raw.split(',').map(s => s.trim()).filter(Boolean);
-      if (!user.length) return alert('Введите хотя бы один продукт!');
+      const user = raw.split(',').map(s=>s.trim()).filter(Boolean);
+      if(!user.length) return alert('Введите продукты!');
 
-      try {
-        const found = recipes.filter(r => {
-          if (!r.i || !r.i.length) return false;
-          const matched = r.i.filter(([idx]) => user.some(u => fuzzy(u, ingDict[idx]))).length;
-          return (matched / r.i.length) >= MATCH_THRESHOLD;
-        }).sort((a, b) => {
-          const ma = a.i.filter(([i]) => user.some(u => fuzzy(u, ingDict[i]))).length / a.i.length;
-          const mb = b.i.filter(([i]) => user.some(u => fuzzy(u, ingDict[i]))).length / b.i.length;
-          return mb - ma;
-        });
+      console.log('🔎 Поиск:', user);
+      const debugLog = [];
 
-        render(found, user); saveHistory(raw);
-      } catch (err) {
-        res.innerHTML = `<div class="empty">⚠️ Ошибка поиска: ${err.message}</div>`;
-        console.error(err);
-      }
+      const found = recipes.filter(r => {
+        if(!r.i?.length) return false;
+        const matches = r.i.filter(([idx]) => {
+          const ingName = ingDict[idx];
+          const matched = user.some(u => fuzzy(u, ingName));
+          if(matched) debugLog.push(`✓ ${ingName}`);
+          return matched;
+        }).length;
+        const pct = matches / r.i.length;
+        if(pct >= MATCH_THRESHOLD) debugLog.push(`📋 ${r.n}: ${matches}/${r.i.length} совпадений`);
+        return pct >= MATCH_THRESHOLD;
+      }).sort((a,b) => {
+        const ma = a.i.filter(([i])=>user.some(u=>fuzzy(u,ingDict[i]))).length/a.i.length;
+        const mb = b.i.filter(([i])=>user.some(u=>fuzzy(u,ingDict[i]))).length/b.i.length;
+        return mb-ma;
+      });
+
+      console.log('📊 Найдено:', found.length, 'из', recipes.length);
+      if(debugLog.length) console.log('📝 Детали:', debugLog.slice(0,20));
+
+      render(found, user);
+      saveHistory(raw);
     };
 
     const render = (list, user) => {
       res.innerHTML = '';
-      if (!list.length) { res.innerHTML = '<div class="empty">😔 Ничего не найдено. Попробуйте добавить больше продуктов.</div>'; return; }
+      if(!list.length) {
+        res.innerHTML = '<div class="empty">😔 Ничего не найдено. Проверьте консоль (F12) для деталей.</div>';
+        return;
+      }
       list.forEach(r => {
         const k = calcKBZU(r.i);
         const miss = r.i.filter(([idx]) => !user.some(u => fuzzy(u, ingDict[idx])));
-        const pct = Math.round(((r.i.length - miss.length) / r.i.length) * 100);
+        const pct = Math.round(((r.i.length - miss.length)/r.i.length)*100);
         const el = document.createElement('div'); el.className = 'card';
         el.innerHTML = `
           <div class="title">${formatName(r.n)} <span class="badge">${pct}%</span></div>
           <div class="kbzu">📊 КБЖУ на 100г: ${k.kcal} ккал | Б:${k.prot} Ж:${k.fat} У:${k.carb}</div>
-          <ul class="ing">${r.i.map(([idx,g])=>`<li><b>${ingDict[idx] || '?'}</b> — ${g}г</li>`).join('')}</ul>
-          ${miss.length ? `<div class="missing">⚠️ Не хватает: ${miss.map(([i])=>ingDict[i] || '?').join(', ')}</div>` : '<div style="color:var(--ok);font-weight:500;margin-top:8px">✅ Всё есть</div>'}
+          <ul class="ing">${r.i.map(([idx,g])=>`<li><b>${ingDict[idx]||'?'}</b> — ${g}г</li>`).join('')}</ul>
+          ${miss.length ? `<div class="missing">⚠️ Не хватает: ${miss.map(([i])=>ingDict[i]||'?').join(', ')}</div>` : '<div style="color:var(--ok);font-weight:500;margin-top:8px">✅ Всё есть</div>'}
         `;
         res.appendChild(el);
       });
