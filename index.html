@@ -30,13 +30,11 @@
     .tag { display: inline-block; background: #e8f5e9; color: var(--ok); padding: 8px 12px; border-radius: 20px; margin: 4px; font-size: 13px; cursor: pointer; }
     .tag:hover { background: var(--primary); color: #fff; }
     .empty { text-align: center; color: var(--light); padding: 30px 0; }
-    .debug { background: #e3f2fd; padding: 10px; border-radius: 8px; margin-bottom: 15px; font-size: 11px; color: #1565c0; display: none; max-height: 150px; overflow: auto; }
   </style>
 </head>
 <body>
   <div class="container">
     <h1>🌿 Подбор рецептов</h1>
-    <div id="debugBox" class="debug"></div>
     <div class="controls">
       <textarea id="input" rows="3" placeholder="Продукты через запятую (курица, рис, морковь)"></textarea>
       <button id="btn" disabled>⏳ Загрузка базы...</button>
@@ -49,84 +47,63 @@
   </div>
 
   <script>
-    const MATCH_THRESHOLD = 0.7;
-    let ingDict = [];
-    let recipes = [];
-    let kbzuDB = [];
-    let isReady = false;
-    const btn = document.getElementById('btn');
-    const res = document.getElementById('results');
-    const debugBox = document.getElementById('debugBox');
+    // === НАСТРОЙКИ ПОИСКА ===
+    const MATCH_PERCENT = 0.35;  // 35% ингредиентов должно совпадать ИЛИ
+    const MIN_ABSOLUTE = 2;      // минимум 2 абсолютных совпадения
+    
+    let ingDict = [], recipes = [], kbzuDB = [], isReady = false;
+    const btn = document.getElementById('btn'), res = document.getElementById('results');
 
-    const trimAll = obj => {
-      if (Array.isArray(obj)) return obj.map(trimAll);
-      if (obj && typeof obj === 'object') {
+    // Очистка данных от пробелов в ключах/значениях
+    const clean = obj => {
+      if(Array.isArray(obj)) return obj.map(clean);
+      if(obj && typeof obj === 'object') {
         const out = {};
-        for (const [k, v] of Object.entries(obj)) {
+        for(const [k,v] of Object.entries(obj)) {
           const key = String(k).trim();
-          const val = typeof v === 'string' ? v.trim() : v;
-          out[key] = val;
+          out[key] = typeof v === 'string' ? v.trim() : v;
         }
         return out;
       }
       return obj;
     };
 
-    console.time('📥 Load');
+    // Загрузка данных
     Promise.all([
-      fetch('./recipes.json').then(r => r.ok ? r.json() : Promise.reject(`recipes.json: ${r.status}`)),
-      fetch('./kbzu.json').then(r => r.ok ? r.json() : Promise.reject(`kbzu.json: ${r.status}`))
+      fetch('./recipes.json').then(r => r.ok ? r.json() : Promise.reject('recipes.json')),
+      fetch('./kbzu.json').then(r => r.ok ? r.json() : Promise.reject('kbzu.json'))
     ])
-    .then(([recData, kbzData]) => {
-      // Полная очистка данных от пробелов
-      recData = trimAll(recData);
-      kbzData = trimAll(kbzData);
-
-      if (!recData.d || !recData.r) throw new Error('Неверная структура recipes.json');
+    .then(([rec, kbz]) => {
+      rec = clean(rec); kbz = clean(kbz);
+      if(!rec.d || !rec.r) throw new Error('Неверный формат recipes.json');
       
-      ingDict = recData.d.map(s => String(s).trim()).filter(Boolean);
-      recipes = recData.r.map(r => ({
-        n: String(r.n || '').trim(),
-        i: (r.i || []).map(([idx, g]) => [idx, g || 0])
-      }));
-
-      kbzuDB = kbzData.filter(i => i.name).map(i => ({
+      ingDict = rec.d.map(s => String(s).trim()).filter(Boolean);
+      recipes = rec.r.map(r => ({n: String(r.n||'').trim(), i: (r.i||[]).map(([idx,g])=>[idx, g||0])}));
+      kbzuDB = kbz.filter(i=>i.name).map(i => ({
         name: String(i.name).trim(),
-        kcal: parseFloat(i.kcal) || 0,
-        prot: parseFloat(i.prot) || 0,
-        fat: parseFloat(i.fat) || 0,
-        carb: parseFloat(i.carb) || 0
+        kcal: +i.kcal||0, prot: +i.prot||0, fat: +i.fat||0, carb: +i.carb||0
       }));
-
+      
       isReady = true;
       btn.disabled = false;
       btn.textContent = '🔍 Найти рецепты';
-      
-      const log = `✅ Загружено: ${recipes.length} рецептов | ${ingDict.length} ингредиентов | ${kbzuDB.length} КБЖУ`;
-      debugBox.textContent = log;
-      debugBox.style.display = 'block';
-      console.log(log);
-      console.log('🔍 Примеры ингредиентов:', ingDict.slice(0, 10));
-      console.timeEnd('📥 Load');
+      console.log(`✅ Загружено: ${recipes.length} рецептов, ${kbzuDB.length} КБЖУ`);
       renderHistory();
     })
     .catch(err => {
-      console.error('❌ Load error:', err);
-      debugBox.textContent = `❌ ${err.message}`;
-      debugBox.style.display = 'block';
       res.innerHTML = `<div class="empty">⚠️ ${err.message}</div>`;
+      console.error(err);
     });
 
     const norm = s => String(s).toLowerCase().replace(/[^а-яёa-z0-9\s]/g, '').trim();
     
     const fuzzy = (q, t) => {
       const a = norm(q), b = norm(t);
-      if (!a || !b) return false;
-      if (a === b) return true;
-      if (b.includes(a) || a.includes(b)) return true;
-      if (a.length >= 3 && b.includes(a.substring(0, 3))) return true;
-      if (a.length <= 12) {
-        const m = a.length, n = b.length, dp = Array(m+1).fill().map(()=>Array(n+1).fill(0));
+      if(!a || !b) return false;
+      if(a === b || b.includes(a) || a.includes(b)) return true;
+      if(a.length >= 3 && b.includes(a.substring(0, 3))) return true;
+      if(a.length <= 12) {
+        const m=a.length, n=b.length, dp=Array(m+1).fill().map(()=>Array(n+1).fill(0));
         for(let i=0;i<=m;i++) dp[i][0]=i;
         for(let j=0;j<=n;j++) dp[0][j]=j;
         for(let i=1;i<=m;i++) for(let j=1;j<=n;j++) {
@@ -138,12 +115,12 @@
     };
 
     const getKBZU = name => kbzuDB.find(i => fuzzy(name, i.name)) || {kcal:0,prot:0,fat:0,carb:0};
-
+    
     const calcKBZU = ings => {
       let tc=0,tp=0,tf=0,tcb=0,tw=0;
       ings.forEach(([idx,g]) => {
         const nm = ingDict[idx]; if(!nm) return;
-        const k = getKBZU(nm); const w = g||100;
+        const k = getKBZU(nm), w = g||100;
         tc+=k.kcal*w/100; tp+=k.prot*w/100; tf+=k.fat*w/100; tcb+=k.carb*w/100; tw+=w;
       });
       return tw===0 ? {kcal:0,prot:0,fat:0,carb:0} : {
@@ -158,28 +135,20 @@
       const user = raw.split(',').map(s=>s.trim()).filter(Boolean);
       if(!user.length) return alert('Введите продукты!');
 
-      console.log('🔎 Поиск:', user);
-      const debugLog = [];
-
       const found = recipes.filter(r => {
         if(!r.i?.length) return false;
-        const matches = r.i.filter(([idx]) => {
-          const ingName = ingDict[idx];
-          const matched = user.some(u => fuzzy(u, ingName));
-          if(matched) debugLog.push(`✓ ${ingName}`);
-          return matched;
-        }).length;
+        const matches = r.i.filter(([idx]) => user.some(u => fuzzy(u, ingDict[idx]))).length;
         const pct = matches / r.i.length;
-        if(pct >= MATCH_THRESHOLD) debugLog.push(`📋 ${r.n}: ${matches}/${r.i.length} совпадений`);
-        return pct >= MATCH_THRESHOLD;
+        // ✅ Двойное условие: ИЛИ процент, ИЛИ абсолютное число
+        return (pct >= MATCH_PERCENT) || (matches >= MIN_ABSOLUTE);
       }).sort((a,b) => {
-        const ma = a.i.filter(([i])=>user.some(u=>fuzzy(u,ingDict[i]))).length/a.i.length;
-        const mb = b.i.filter(([i])=>user.some(u=>fuzzy(u,ingDict[i]))).length/b.i.length;
-        return mb-ma;
+        // Сортировка: сначала по количеству совпадений, потом по проценту
+        const ma = a.i.filter(([i])=>user.some(u=>fuzzy(u,ingDict[i]))).length;
+        const mb = b.i.filter(([i])=>user.some(u=>fuzzy(u,ingDict[i]))).length;
+        if(mb !== ma) return mb - ma;
+        const pa = ma / a.i.length, pb = mb / b.i.length;
+        return pb - pa;
       });
-
-      console.log('📊 Найдено:', found.length, 'из', recipes.length);
-      if(debugLog.length) console.log('📝 Детали:', debugLog.slice(0,20));
 
       render(found, user);
       saveHistory(raw);
@@ -188,7 +157,7 @@
     const render = (list, user) => {
       res.innerHTML = '';
       if(!list.length) {
-        res.innerHTML = '<div class="empty">😔 Ничего не найдено. Проверьте консоль (F12) для деталей.</div>';
+        res.innerHTML = '<div class="empty">😔 Ничего не найдено. Попробуйте добавить больше продуктов.</div>';
         return;
       }
       list.forEach(r => {
