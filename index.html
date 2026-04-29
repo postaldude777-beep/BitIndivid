@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#4caf50">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon-192.png" type="image/png">
+  <title>🌿 Умный подбор рецептов</title>
+  <style>
+    :root {
+      --bg: #f0f7f0;
+      --card-bg: #ffffff;
+      --primary: #4caf50;
+      --primary-hover: #388e3c;
+      --text: #263238;
+      --text-light: #546e7a;
+      --border: #e0e0e0;
+      --missing: #d32f2f;
+      --success: #2e7d32;
+      --shadow: 0 4px 16px rgba(0,0,0,0.08);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: 16px;
+      line-height: 1.5;
+      -webkit-tap-highlight-color: transparent;
+      min-height: 100vh;
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      background: var(--card-bg);
+      padding: 20px;
+      border-radius: 16px;
+      box-shadow: var(--shadow);
+    }
+    h1 {
+      text-align: center;
+      color: var(--success);
+      margin-bottom: 20px;
+      font-weight: 600;
+      font-size: 22px;
+    }
+    .controls {
+      display: grid;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    input, select, textarea {
+      width: 100%;
+      padding: 14px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      font-size: 16px;
+      background: #fafafa;
+      transition: 0.2s;
+      -webkit-appearance: none;
+    }
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: var(--primary);
+      background: #fff;
+    }
+    button {
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      padding: 16px;
+      border-radius: 12px;
+      cursor: pointer;
+      font-size: 17px;
+      font-weight: 500;
+      transition: background 0.2s, transform 0.1s;
+      min-height: 48px;
+    }
+    button:hover, button:active { background: var(--primary-hover); transform: scale(0.98); }
+    button:disabled { background: #a5d6a7; cursor: not-allowed; }
+    .results { display: grid; gap: 14px; }
+    .recipe-card {
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px;
+      background: #fafafa;
+    }
+    .recipe-title {
+      font-size: 18px;
+      color: var(--success);
+      margin-bottom: 6px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .badge {
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      background: var(--primary);
+      color: #fff;
+    }
+    .kbzu-box {
+      background: #e8f5e9;
+      padding: 10px;
+      border-radius: 10px;
+      margin: 8px 0;
+      font-size: 14px;
+    }
+    .ingredients-list {
+      margin: 8px 0;
+      padding-left: 18px;
+      color: var(--text-light);
+      font-size: 14px;
+    }
+    .ingredients-list li { margin-bottom: 4px; }
+    .missing {
+      color: var(--missing);
+      font-weight: 500;
+      margin-top: 8px;
+      font-size: 14px;
+    }
+    .steps {
+      margin-top: 10px;
+      padding-left: 18px;
+      color: var(--text-light);
+      font-size: 14px;
+    }
+    .history {
+      margin-top: 24px;
+      padding-top: 14px;
+      border-top: 2px solid var(--border);
+    }
+    .history h3 { margin-bottom: 10px; color: var(--text-light); font-size: 16px; }
+    .history-tag {
+      display: inline-block;
+      background: #e8f5e9;
+      color: var(--success);
+      padding: 8px 14px;
+      border-radius: 20px;
+      margin: 4px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+    .history-tag:hover { background: var(--primary); color: #fff; }
+    .empty-state { text-align: center; color: var(--text-light); padding: 32px 0; font-size: 15px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🌿 Умный подбор рецептов</h1>
+    <div class="controls">
+      <textarea id="ingredientsInput" rows="3" placeholder="Продукты через запятую (курица, рис, морковь)"></textarea>
+      <select id="difficultySelect">
+        <option value="all">Любая сложность</option>
+        <option value="простой">Простой</option>
+        <option value="продвинутый">Продвинутый</option>
+        <option value="сложный">Сложный</option>
+      </select>
+      <select id="categorySelect">
+        <option value="all">Любой приём пищи</option>
+        <option value="завтрак">Завтрак</option>
+        <option value="обед">Обед</option>
+        <option value="ужин">Ужин</option>
+      </select>
+      <input type="number" id="calorieLimit" placeholder="Макс. ккал на 100г (необязательно)">
+      <button id="searchBtn" disabled>⏳ Загрузка базы...</button>
+    </div>
+    <div id="results"></div>
+    <div class="history">
+      <h3>📜 История поиска</h3>
+      <div id="historyList"></div>
+    </div>
+  </div>
+
+  <script>
+    // Глобальные переменные для баз данных
+    let recipesDB = [];
+    let ingredientsDB = [];
+    let isReady = false;
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const searchBtn = document.getElementById('searchBtn');
+      const results = document.getElementById('results');
+      
+      // Загрузка обоих JSON одновременно
+      Promise.all([
+        fetch('./recipes.json').then(r => { if (!r.ok) throw new Error('Файл recipes.json не найден'); return r.json(); }),
+        fetch('./ingredients.json').then(r => { if (!r.ok) throw new Error('Файл ingredients.json не найден'); return r.json(); })
+      ])
+      .then(([recipes, ingredients]) => {
+        recipesDB = recipes;
+        ingredientsDB = ingredients;
+        isReady = true;
+        searchBtn.disabled = false;
+        searchBtn.textContent = '🔍 Найти рецепты';
+        searchBtn.style.opacity = '1';
+        renderHistory();
+        console.log(`✅ Загружено: ${recipes.length} рецептов, ${ingredients.length} ингредиентов`);
+      })
+      .catch(err => {
+        console.error(err);
+        searchBtn.textContent = '❌ Ошибка загрузки базы';
+        results.innerHTML = `<div class="empty-state">⚠️ Не удалось загрузить данные.<br><small>${err.message}</small></div>`;
+      });
+
+      // === ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ===
+      const normalize = str => str.toLowerCase().replace(/[^а-яёa-z0-9\s]/g, '').trim();
+
+      const fuzzyMatch = (query, target) => {
+        const q = normalize(query), t = normalize(target);
+        if (!q || !t) return false;
+        if (t.includes(q) || q.includes(t)) return true;
+        if (q.length >= 4 && t.substring(0, 4) === q.substring(0, 4)) return true;
+        for (let i = 0; i <= q.length - 3; i++) {
+          if (t.includes(q.substring(i, i + 3))) return true;
+        }
+        if (q.length <= 10) {
+          const len1 = q.length, len2 = t.length;
+          const dp = Array(len1 + 1).fill().map(() => Array(len2 + 1).fill(0));
+          for (let i = 0; i <= len1; i++) dp[i][0] = i;
+          for (let j = 0; j <= len2; j++) dp[0][j] = j;
+          for (let i = 1; i <= len1; i++) {
+            for (let j = 1; j <= len2; j++) {
+              const cost = q[i-1] === t[j-1] ? 0 : 1;
+              dp[i][j] = Math.min(dp[i-1][j] + 1, dp[i][j-1] + 1, dp[i-1][j-1] + cost);
+            }
+          }
+          return dp[len1][len2] <= 3;
+        }
+        return false;
+      };
+
+      const getNutrition = (name) => {
+        const found = ingredientsDB.find(i => fuzzyMatch(name, i.name));
+        return found || { name, cal: 0, prot: 0, fat: 0, carb: 0 };
+      };
+
+      const calcKBZU = (recipe) => {
+        let tC=0, tP=0, tF=0, tCb=0, tW=0;
+        recipe.ingredients.forEach(i => {
+          const n = getNutrition(i.name);
+          const w = i.weight_g || 100;
+          tC += (n.cal * w)/100; tP += (n.prot * w)/100;
+          tF += (n.fat * w)/100; tCb += (n.carb * w)/100; tW += w;
+        });
+        if (tW === 0) return { cal: 0, prot: 0, fat: 0, carb: 0 };
+        return {
+          cal: Math.round((tC/tW)*100),
+          prot: Math.round((tP/tW)*100),
+          fat: Math.round((tF/tW)*100),
+          carb: Math.round((tCb/tW)*100)
+        };
+      };
+
+      // === ОСНОВНАЯ ЛОГИКА ===
+      window.findRecipes = () => {
+        if (!isReady) return;
+        const raw = document.getElementById('ingredientsInput').value;
+        const userIng = raw.split(',').map(s => s.trim()).filter(Boolean);
+        if (!userIng.length) { alert('Введите хотя бы один продукт!'); return; }
+
+        const diff = document.getElementById('difficultySelect').value;
+        const cat = document.getElementById('categorySelect').value;
+        const calLim = parseInt(document.getElementById('calorieLimit').value) || null;
+
+        const found = recipesDB.filter(r => {
+          if (diff !== 'all' && r.difficulty !== diff) return false;
+          if (cat !== 'all' && r.category !== cat) return false;
+          const k = calcKBZU(r);
+          if (calLim && k.cal > calLim) return false;
+          const missing = r.ingredients.filter(i => !userIng.some(u => fuzzyMatch(u, i.name)));
+          return missing.length <= 2;
+        });
+
+        renderResults(found, userIng);
+        saveHistory(raw, diff, cat, calLim);
+      };
+
+      // === ОТРИСОВКА ===
+      const renderResults = (recipes, userIng) => {
+        results.innerHTML = '';
+        if (!recipes.length) {
+          results.innerHTML = '<div class="empty-state">😔 Ничего не найдено. Ослабьте фильтры или добавьте продукты.</div>';
+          return;
+        }
+        recipes.forEach(r => {
+          const k = calcKBZU(r);
+          const missing = r.ingredients.filter(i => !userIng.some(u => fuzzyMatch(u, i.name)));
+          const card = document.createElement('div');
+          card.className = 'recipe-card';
+          card.innerHTML = `
+            <div class="recipe-title"><span>${r.name}</span><span class="badge">${r.difficulty}</span></div>
+            <div style="font-size:14px; color:var(--text-light); margin-bottom:6px;">🍽 ${r.category}</div>
+            <div class="kbzu-box"><b>КБЖУ на 100г:</b> ${k.cal} ккал | Б:${k.prot}г | Ж:${k.fat}г | У:${k.carb}г</div>
+            <ul class="ingredients-list">${r.ingredients.map(i => `<li><b>${i.name}</b> — ${i.weight_g}г</li>`).join('')}</ul>
+            ${missing.length ? `<div class="missing">⚠️ Не хватает: ${missing.map(m=>m.name).join(', ')}</div>` : '<div style="color:var(--success); font-weight:500; margin-top:6px;">✅ Все продукты есть!</div>'}
+            <div style="margin-top:10px; font-weight:500;">📝 Приготовление:</div>
+            <ol class="steps">${r.steps.map(s => `<li>${s}</li>`).join('')}</ol>`;
+          results.appendChild(card);
+        });
+      };
+
+      // === ИСТОРИЯ ===
+      const saveHistory = (ing, diff, cat, cal) => {
+        let h = JSON.parse(localStorage.getItem('recipeHistory') || '[]');
+        h = h.filter(x => x.ing !== ing).slice(0, 9);
+        h.unshift({ ing, diff, cat, cal });
+        localStorage.setItem('recipeHistory', JSON.stringify(h));
+        renderHistory();
+      };
+      const renderHistory = () => {
+        const list = document.getElementById('historyList');
+        const h = JSON.parse(localStorage.getItem('recipeHistory') || '[]');
+        list.innerHTML = h.length 
+          ? h.map(x => `<span class="history-tag" onclick="restoreSearch('${x.ing.replace(/'/g,"\\'")}','${x.diff}','${x.cat}','${x.cal||''}')">${x.ing.substring(0,20)}${x.ing.length>20?'...':''} (${x.cat})</span>`).join('')
+          : '<span style="color:var(--text-light); font-size:14px;">История пуста</span>';
+      };
+      window.restoreSearch = (ing, diff, cat, cal) => {
+        document.getElementById('ingredientsInput').value = ing;
+        document.getElementById('difficultySelect').value = diff;
+        document.getElementById('categorySelect').value = cat;
+        if(cal) document.getElementById('calorieLimit').value = cal;
+        window.findRecipes();
+      };
+
+      document.getElementById('searchBtn').addEventListener('click', window.findRecipes);
+      renderHistory();
+    });
+
+    // === PWA SERVICE WORKER ===
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(() => {});
+      });
+    }
+  </script>
+</body>
+</html>
