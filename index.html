@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#4caf50">
-    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
     <title>🌿 Подбор рецептов</title>
     <style>
         :root { --bg: #f4f9f4; --card: #fff; --primary: #4caf50; --text: #2c3e50; --light: #607d8b; --warn: #e53935; --ok: #2e7d32; }
@@ -83,6 +83,9 @@
 </div>
 
 <script>
+    // ===================== УТИЛИТЫ (должны быть до использования) =====================
+    const norm = s => String(s).toLowerCase().replace(/[^а-яёa-z0-9\s]/g, '').trim();
+
     // ===================== НАСТРОЙКИ =====================
     const MATCH_PERCENT = 0.35;   // 35% совпадений дополнительных ингредиентов
     const MIN_ABSOLUTE = 2;       // или минимум 2 совпадения
@@ -110,8 +113,7 @@
     const otherInput = document.getElementById('otherIngredients');
     const resDiv = document.getElementById('results');
 
-    // ===================== УТИЛИТЫ =====================
-    const norm = s => String(s).toLowerCase().replace(/[^а-яёa-z0-9\s]/g, '').trim();
+    // Очистка данных от пробелов в ключах/значениях
     const clean = obj => {
         if (Array.isArray(obj)) return obj.map(clean);
         if (obj && typeof obj === 'object') {
@@ -124,7 +126,7 @@
         return obj;
     };
 
-    // Нечёткий поиск (тот же, что был раньше)
+    // Нечёткий поиск
     const fuzzy = (q, t) => {
         const a = norm(q), b = norm(t);
         if (!a || !b) return false;
@@ -365,9 +367,6 @@
             addCustomKbzu(ingName, { name: ingName, kcal, prot, fat, carb });
             form.remove();
             // Перерисовываем все результаты (можно только эту карточку)
-            const others = parseOthers(otherInput.value.trim());
-            const main = selectedMain;
-            // Восстанавливаем список рецептов после обновления
             window.findRecipes();
         });
 
