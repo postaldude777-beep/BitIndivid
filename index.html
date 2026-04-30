@@ -1,196 +1,476 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <meta name="theme-color" content="#4caf50">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <title>🌿 Подбор рецептов</title>
-  <style>
-    :root { --bg: #f4f9f4; --card: #fff; --primary: #4caf50; --text: #2c3e50; --light: #607d8b; --warn: #e53935; --ok: #2e7d32; }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); padding: 16px; line-height: 1.5; }
-    .container { max-width: 800px; margin: 0 auto; background: var(--card); padding: 20px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
-    h1 { text-align: center; color: var(--ok); margin-bottom: 20px; font-size: 22px; }
-    .controls { display: grid; gap: 12px; margin-bottom: 20px; }
-    textarea { width: 100%; padding: 14px; border: 1px solid #e0e0e0; border-radius: 12px; font-size: 16px; background: #fafafa; resize: vertical; }
-    textarea:focus { outline: none; border-color: var(--primary); background: #fff; }
-    button { background: var(--primary); color: #fff; border: none; padding: 16px; border-radius: 12px; font-size: 17px; cursor: pointer; min-height: 48px; }
-    button:hover { background: #388e3c; }
-    button:disabled { background: #a5d6a7; cursor: not-allowed; }
-    .card { border: 1px solid #e0e0e0; border-radius: 14px; padding: 16px; margin-bottom: 14px; background: #fafafa; }
-    .title { font-size: 18px; color: var(--ok); font-weight: 600; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
-    .badge { font-size: 12px; padding: 4px 8px; border-radius: 12px; background: #e8f5e9; color: var(--ok); }
-    .kbzu { background: #e8f5e9; padding: 10px; border-radius: 10px; margin: 8px 0; font-size: 14px; font-weight: 500; }
-    .ing { margin: 10px 0; padding-left: 20px; font-size: 14px; color: var(--light); }
-    .ing li { margin-bottom: 4px; }
-    .missing { color: var(--warn); font-weight: 500; margin-top: 8px; font-size: 14px; }
-    .history { margin-top: 24px; padding-top: 14px; border-top: 2px solid #e0e0e0; }
-    .history h3 { margin-bottom: 10px; color: var(--light); font-size: 15px; }
-    .tag { display: inline-block; background: #e8f5e9; color: var(--ok); padding: 8px 12px; border-radius: 20px; margin: 4px; font-size: 13px; cursor: pointer; }
-    .tag:hover { background: var(--primary); color: #fff; }
-    .empty { text-align: center; color: var(--light); padding: 30px 0; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#4caf50">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>🌿 Подбор рецептов</title>
+    <style>
+        :root { --bg: #f4f9f4; --card: #fff; --primary: #4caf50; --text: #2c3e50; --light: #607d8b; --warn: #e53935; --ok: #2e7d32; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); padding: 16px; line-height: 1.5; }
+        .container { max-width: 900px; margin: 0 auto; background: var(--card); padding: 24px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+        h1 { text-align: center; color: var(--ok); margin-bottom: 20px; font-size: 24px; }
+        .section { margin-bottom: 20px; }
+        label { font-weight: 600; display: block; margin-bottom: 6px; color: var(--text); }
+        .autocomplete { position: relative; }
+        input[type="text"], textarea {
+            width: 100%; padding: 14px; border: 1px solid #e0e0e0; border-radius: 12px; font-size: 16px;
+            background: #fafafa; transition: border 0.2s, background 0.2s;
+        }
+        input[type="text"]:focus, textarea:focus { outline: none; border-color: var(--primary); background: #fff; }
+        .suggestions {
+            position: absolute; top: 100%; left: 0; right: 0; background: #fff; border: 1px solid #ccc;
+            border-top: none; border-radius: 0 0 12px 12px; max-height: 200px; overflow-y: auto;
+            display: none; z-index: 10; box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .suggestions div { padding: 10px 14px; cursor: pointer; }
+        .suggestions div:hover { background: #f0f0f0; }
+        button {
+            background: var(--primary); color: #fff; border: none; padding: 14px 24px; border-radius: 12px;
+            font-size: 16px; cursor: pointer; transition: background 0.2s; min-height: 48px;
+        }
+        button:hover { background: #388e3c; }
+        button:disabled { background: #a5d6a7; cursor: not-allowed; }
+        .card {
+            border: 1px solid #e0e0e0; border-radius: 14px; padding: 18px; margin-bottom: 16px;
+            background: #fafafa; position: relative;
+        }
+        .recipe-title { font-size: 18px; color: var(--ok); font-weight: 600; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; }
+        .kbzu { background: #e8f5e9; padding: 10px; border-radius: 10px; margin: 8px 0; font-size: 14px; font-weight: 500; }
+        .ing-list { margin: 10px 0; padding-left: 20px; font-size: 14px; color: var(--light); }
+        .ing-item { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+        .ing-name { font-weight: 500; }
+        .ing-kbzu { font-size: 13px; color: var(--light); margin-left: 12px; }
+        .missing { color: var(--warn); font-weight: 500; margin-top: 8px; font-size: 14px; }
+        .badge { font-size: 12px; padding: 4px 8px; border-radius: 12px; background: #e8f5e9; color: var(--ok); }
+        .add-kbzu-btn { background: #ff9800; color: white; border: none; padding: 4px 10px; border-radius: 8px; font-size: 13px; cursor: pointer; margin-left: 8px; }
+        .kbzu-form { background: #fff3e0; padding: 10px; border-radius: 10px; margin-top: 6px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+        .kbzu-form input { width: 70px; padding: 6px; border-radius: 8px; border: 1px solid #ddd; }
+        .history { margin-top: 24px; padding-top: 14px; border-top: 2px solid #e0e0e0; }
+        .history h3 { margin-bottom: 10px; color: var(--light); font-size: 15px; }
+        .tag { display: inline-block; background: #e8f5e9; color: var(--ok); padding: 8px 12px; border-radius: 20px; margin: 4px; font-size: 13px; cursor: pointer; }
+        .tag:hover { background: var(--primary); color: #fff; }
+        .empty { text-align: center; color: var(--light); padding: 30px 0; }
+    </style>
 </head>
 <body>
-  <div class="container">
+<div class="container">
     <h1>🌿 Подбор рецептов</h1>
-    <div class="controls">
-      <textarea id="input" rows="3" placeholder="Продукты через запятую (курица, рис, морковь)"></textarea>
-      <button id="btn" disabled>⏳ Загрузка базы...</button>
+
+    <div class="section">
+        <label>1. Основной ингредиент</label>
+        <div class="autocomplete">
+            <input type="text" id="mainIngredient" placeholder="Начните вводить (например, курица)" autocomplete="off">
+            <div id="mainSuggestions" class="suggestions"></div>
+        </div>
     </div>
+
+    <div class="section">
+        <label>2. Дополнительные ингредиенты (через запятую или пробел)</label>
+        <textarea id="otherIngredients" rows="2" placeholder="рис, лук, морковь"></textarea>
+    </div>
+
+    <button id="btn" disabled>⏳ Загрузка базы...</button>
+
     <div id="results"></div>
+
     <div class="history">
-      <h3>📜 История поиска</h3>
-      <div id="histList"></div>
+        <h3>📜 История поиска</h3>
+        <div id="histList"></div>
     </div>
-  </div>
+</div>
 
-  <script>
-    // === НАСТРОЙКИ ПОИСКА ===
-    const MATCH_PERCENT = 0.35;  // 35% ингредиентов должно совпадать ИЛИ
-    const MIN_ABSOLUTE = 2;      // минимум 2 абсолютных совпадения
-    
-    let ingDict = [], recipes = [], kbzuDB = [], isReady = false;
-    const btn = document.getElementById('btn'), res = document.getElementById('results');
+<script>
+    // ===================== НАСТРОЙКИ =====================
+    const MATCH_PERCENT = 0.35;   // 35% совпадений дополнительных ингредиентов
+    const MIN_ABSOLUTE = 2;       // или минимум 2 совпадения
+    const MAX_RECIPES = 15;
 
-    // Очистка данных от пробелов в ключах/значениях
+    // Игнорируемые ингредиенты (не учитываются в совпадениях и не считаются «не хватает»)
+    const IGNORED_RAW = [
+        "вода", "соль", "перец", "перец черный", "перец красный", "сахар",
+        "масло растительное", "масло подсолнечное", "масло сливочное", "масло оливковое",
+        "мука", "уксус", "сода", "разрыхлитель", "чеснок", "лавровый лист",
+        "зелень", "петрушка", "укроп", "кинза", "базилик", "орегано",
+        "паприка", "куркума", "кориандр", "тмин", "корица", "ваниль",
+        "крахмал", "желатин"
+    ];
+    const ignoredSet = new Set(IGNORED_RAW.map(s => norm(s)));
+
+    // ===================== СОСТОЯНИЕ =====================
+    let ingDict = [], recipes = [], kbzuDB = [], customKbzu = [];
+    let isReady = false;
+    let selectedMain = null;   // точное название выбранного основного ингредиента
+
+    const btn = document.getElementById('btn');
+    const mainInput = document.getElementById('mainIngredient');
+    const suggestionsDiv = document.getElementById('mainSuggestions');
+    const otherInput = document.getElementById('otherIngredients');
+    const resDiv = document.getElementById('results');
+
+    // ===================== УТИЛИТЫ =====================
+    const norm = s => String(s).toLowerCase().replace(/[^а-яёa-z0-9\s]/g, '').trim();
     const clean = obj => {
-      if(Array.isArray(obj)) return obj.map(clean);
-      if(obj && typeof obj === 'object') {
-        const out = {};
-        for(const [k,v] of Object.entries(obj)) {
-          const key = String(k).trim();
-          out[key] = typeof v === 'string' ? v.trim() : v;
+        if (Array.isArray(obj)) return obj.map(clean);
+        if (obj && typeof obj === 'object') {
+            const out = {};
+            for (const [k, v] of Object.entries(obj)) {
+                out[String(k).trim()] = typeof v === 'string' ? v.trim() : v;
+            }
+            return out;
         }
-        return out;
-      }
-      return obj;
+        return obj;
     };
 
-    // Загрузка данных
-    Promise.all([
-      fetch('./recipes.json').then(r => r.ok ? r.json() : Promise.reject('recipes.json')),
-      fetch('./kbzu.json').then(r => r.ok ? r.json() : Promise.reject('kbzu.json'))
-    ])
-    .then(([rec, kbz]) => {
-      rec = clean(rec); kbz = clean(kbz);
-      if(!rec.d || !rec.r) throw new Error('Неверный формат recipes.json');
-      
-      ingDict = rec.d.map(s => String(s).trim()).filter(Boolean);
-      recipes = rec.r.map(r => ({n: String(r.n||'').trim(), i: (r.i||[]).map(([idx,g])=>[idx, g||0])}));
-      kbzuDB = kbz.filter(i=>i.name).map(i => ({
-        name: String(i.name).trim(),
-        kcal: +i.kcal||0, prot: +i.prot||0, fat: +i.fat||0, carb: +i.carb||0
-      }));
-      
-      isReady = true;
-      btn.disabled = false;
-      btn.textContent = '🔍 Найти рецепты';
-      console.log(`✅ Загружено: ${recipes.length} рецептов, ${kbzuDB.length} КБЖУ`);
-      renderHistory();
-    })
-    .catch(err => {
-      res.innerHTML = `<div class="empty">⚠️ ${err.message}</div>`;
-      console.error(err);
+    // Нечёткий поиск (тот же, что был раньше)
+    const fuzzy = (q, t) => {
+        const a = norm(q), b = norm(t);
+        if (!a || !b) return false;
+        if (a === b || b.includes(a) || a.includes(b)) return true;
+        if (a.length >= 3 && b.includes(a.substring(0, 3))) return true;
+        if (a.length <= 12) {
+            const m = a.length, n = b.length;
+            const dp = Array(m + 1).fill().map(() => Array(n + 1).fill(0));
+            for (let i = 0; i <= m; i++) dp[i][0] = i;
+            for (let j = 0; j <= n; j++) dp[0][j] = j;
+            for (let i = 1; i <= m; i++) {
+                for (let j = 1; j <= n; j++) {
+                    dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+                }
+            }
+            return dp[m][n] / Math.max(m, n) <= 0.4;
+        }
+        return false;
+    };
+
+    // Парсинг строки дополнительных ингредиентов
+    const parseOthers = str => {
+        return str.split(/[,\s]+/).map(s => s.trim()).filter(Boolean);
+    };
+
+    // ===================== ЗАГРУЗКА ДАННЫХ =====================
+    function loadCustomKbzu() {
+        const raw = localStorage.getItem('customKbzu');
+        customKbzu = raw ? JSON.parse(raw) : [];
+    }
+
+    function saveCustomKbzu() {
+        localStorage.setItem('customKbzu', JSON.stringify(customKbzu));
+    }
+
+    function mergeKbzu() {
+        const map = new Map();
+        kbzuDB.forEach(i => map.set(norm(i.name), i));
+        customKbzu.forEach(i => map.set(norm(i.name), i));
+        return Array.from(map.values());
+    }
+
+    function getKbzuForIngredient(name) {
+        const all = mergeKbzu();
+        return all.find(i => fuzzy(name, i.name)) || null;
+    }
+
+    function calcRecipeKbzu(recipe) {
+        let tc = 0, tp = 0, tf = 0, tcb = 0, tw = 0;
+        recipe.i.forEach(([idx, g]) => {
+            const ingName = ingDict[idx];
+            if (!ingName) return;
+            const kb = getKbzuForIngredient(ingName);
+            const weight = g || 100;
+            tw += weight;
+            if (kb) {
+                tc += kb.kcal * weight / 100;
+                tp += kb.prot * weight / 100;
+                tf += kb.fat * weight / 100;
+                tcb += kb.carb * weight / 100;
+            }
+        });
+        if (tw === 0) return { kcal: 0, prot: 0, fat: 0, carb: 0 };
+        return {
+            kcal: Math.round(tc / tw * 100),
+            prot: Math.round(tp / tw * 100),
+            fat: Math.round(tf / tw * 100),
+            carb: Math.round(tcb / tw * 100)
+        };
+    }
+
+    // ===================== АВТОПОДСТАВКА ОСНОВНОГО ИНГРЕДИЕНТА =====================
+    function showSuggestions(query) {
+        const q = norm(query);
+        if (!q) {
+            suggestionsDiv.style.display = 'none';
+            return;
+        }
+        const matches = ingDict.filter(name => fuzzy(query, name)).slice(0, 10);
+        suggestionsDiv.innerHTML = matches.map(m => `<div>${m}</div>`).join('');
+        suggestionsDiv.style.display = matches.length ? 'block' : 'none';
+    }
+
+    mainInput.addEventListener('input', () => {
+        selectedMain = null; // сброс при ручном вводе
+        showSuggestions(mainInput.value);
     });
 
-    const norm = s => String(s).toLowerCase().replace(/[^а-яёa-z0-9\s]/g, '').trim();
-    
-    const fuzzy = (q, t) => {
-      const a = norm(q), b = norm(t);
-      if(!a || !b) return false;
-      if(a === b || b.includes(a) || a.includes(b)) return true;
-      if(a.length >= 3 && b.includes(a.substring(0, 3))) return true;
-      if(a.length <= 12) {
-        const m=a.length, n=b.length, dp=Array(m+1).fill().map(()=>Array(n+1).fill(0));
-        for(let i=0;i<=m;i++) dp[i][0]=i;
-        for(let j=0;j<=n;j++) dp[0][j]=j;
-        for(let i=1;i<=m;i++) for(let j=1;j<=n;j++) {
-          dp[i][j] = Math.min(dp[i-1][j]+1, dp[i][j-1]+1, dp[i-1][j-1]+(a[i-1]===b[j-1]?0:1));
+    mainInput.addEventListener('blur', () => {
+        setTimeout(() => suggestionsDiv.style.display = 'none', 200);
+    });
+
+    suggestionsDiv.addEventListener('click', (e) => {
+        if (e.target.tagName === 'DIV') {
+            const name = e.target.textContent;
+            mainInput.value = name;
+            selectedMain = name;
+            suggestionsDiv.style.display = 'none';
         }
-        return dp[m][n]/Math.max(m,n) <= 0.4;
-      }
-      return false;
-    };
+    });
 
-    const getKBZU = name => kbzuDB.find(i => fuzzy(name, i.name)) || {kcal:0,prot:0,fat:0,carb:0};
-    
-    const calcKBZU = ings => {
-      let tc=0,tp=0,tf=0,tcb=0,tw=0;
-      ings.forEach(([idx,g]) => {
-        const nm = ingDict[idx]; if(!nm) return;
-        const k = getKBZU(nm), w = g||100;
-        tc+=k.kcal*w/100; tp+=k.prot*w/100; tf+=k.fat*w/100; tcb+=k.carb*w/100; tw+=w;
-      });
-      return tw===0 ? {kcal:0,prot:0,fat:0,carb:0} : {
-        kcal:Math.round(tc/tw*100), prot:Math.round(tp/tw*100),
-        fat:Math.round(tf/tw*100), carb:Math.round(tcb/tw*100)
-      };
-    };
-
+    // ===================== ПОИСК РЕЦЕПТОВ =====================
     window.findRecipes = () => {
-      if(!isReady) return;
-      const raw = document.getElementById('input').value;
-      const user = raw.split(',').map(s=>s.trim()).filter(Boolean);
-      if(!user.length) return alert('Введите продукты!');
+        if (!isReady) return;
 
-      const found = recipes.filter(r => {
-        if(!r.i?.length) return false;
-        const matches = r.i.filter(([idx]) => user.some(u => fuzzy(u, ingDict[idx]))).length;
-        const pct = matches / r.i.length;
-        // ✅ Двойное условие: ИЛИ процент, ИЛИ абсолютное число
-        return (pct >= MATCH_PERCENT) || (matches >= MIN_ABSOLUTE);
-      }).sort((a,b) => {
-        // Сортировка: сначала по количеству совпадений, потом по проценту
-        const ma = a.i.filter(([i])=>user.some(u=>fuzzy(u,ingDict[i]))).length;
-        const mb = b.i.filter(([i])=>user.some(u=>fuzzy(u,ingDict[i]))).length;
-        if(mb !== ma) return mb - ma;
-        const pa = ma / a.i.length, pb = mb / b.i.length;
-        return pb - pa;
-      });
+        if (!selectedMain) {
+            // Попытка найти точное совпадение в словаре по тому, что ввёл пользователь
+            const val = mainInput.value.trim();
+            const exact = ingDict.find(name => norm(name) === norm(val));
+            if (exact) {
+                selectedMain = exact;
+                mainInput.value = exact;
+            } else {
+                alert('Выберите основной ингредиент из выпадающего списка (начните вводить и кликните по подходящему варианту).');
+                return;
+            }
+        }
 
-      render(found, user);
-      saveHistory(raw);
+        const otherRaw = otherInput.value.trim();
+        if (!otherRaw) {
+            alert('Введите хотя бы один дополнительный ингредиент.');
+            return;
+        }
+        const othersList = parseOthers(otherRaw);
+        if (othersList.length === 0) {
+            alert('Не удалось распознать дополнительные ингредиенты.');
+            return;
+        }
+
+        // Фильтр рецептов, содержащих основной ингредиент
+        const candidates = recipes.filter(r =>
+            r.i.some(([idx]) => fuzzy(selectedMain, ingDict[idx]))
+        );
+
+        // Оценка совпадений дополнительных ингредиентов
+        const scored = candidates.map(r => {
+            const recIngNames = r.i.map(([idx]) => ingDict[idx]);
+            // Считаем совпавшие дополнительные ингредиенты (исключая игнорируемые)
+            let matched = 0;
+            othersList.forEach(u => {
+                if (recIngNames.some(ri => fuzzy(u, ri) && !ignoredSet.has(norm(ri)))) {
+                    matched++;
+                }
+            });
+            const totalRelevant = recIngNames.filter(ri => !ignoredSet.has(norm(ri))).length;
+            const pct = totalRelevant > 0 ? matched / totalRelevant : 0;
+            return { recipe: r, matched, pct, totalRelevant };
+        }).filter(s => (s.pct >= MATCH_PERCENT || s.matched >= MIN_ABSOLUTE));
+
+        scored.sort((a, b) => {
+            if (b.matched !== a.matched) return b.matched - a.matched;
+            return b.pct - a.pct;
+        });
+
+        const top = scored.slice(0, MAX_RECIPES);
+        render(top, othersList);
+        saveHistory(selectedMain, otherRaw);
     };
 
-    const render = (list, user) => {
-      res.innerHTML = '';
-      if(!list.length) {
-        res.innerHTML = '<div class="empty">😔 Ничего не найдено. Попробуйте добавить больше продуктов.</div>';
-        return;
-      }
-      list.forEach(r => {
-        const k = calcKBZU(r.i);
-        const miss = r.i.filter(([idx]) => !user.some(u => fuzzy(u, ingDict[idx])));
-        const pct = Math.round(((r.i.length - miss.length)/r.i.length)*100);
-        const el = document.createElement('div'); el.className = 'card';
-        el.innerHTML = `
-          <div class="title">${formatName(r.n)} <span class="badge">${pct}%</span></div>
-          <div class="kbzu">📊 КБЖУ на 100г: ${k.kcal} ккал | Б:${k.prot} Ж:${k.fat} У:${k.carb}</div>
-          <ul class="ing">${r.i.map(([idx,g])=>`<li><b>${ingDict[idx]||'?'}</b> — ${g}г</li>`).join('')}</ul>
-          ${miss.length ? `<div class="missing">⚠️ Не хватает: ${miss.map(([i])=>ingDict[i]||'?').join(', ')}</div>` : '<div style="color:var(--ok);font-weight:500;margin-top:8px">✅ Всё есть</div>'}
+    // ===================== ОТРИСОВКА =====================
+    function render(scoredList, userOthers) {
+        resDiv.innerHTML = '';
+        if (!scoredList.length) {
+            resDiv.innerHTML = '<div class="empty">😔 Ничего не найдено. Попробуйте добавить больше продуктов.</div>';
+            return;
+        }
+
+        scoredList.forEach(({ recipe, matched, pct }) => {
+            const k = calcRecipeKbzu(recipe);
+
+            // Определяем отсутствующие ингредиенты (не введённые пользователем и не игнорируемые)
+            const missing = recipe.i.filter(([idx]) => {
+                const name = ingDict[idx];
+                if (ignoredSet.has(norm(name))) return false;
+                // Считаем, что основной ингредиент уже есть
+                if (fuzzy(selectedMain, name)) return false;
+                return !userOthers.some(u => fuzzy(u, name));
+            });
+
+            const card = document.createElement('div');
+            card.className = 'card';
+            card.innerHTML = `
+                <div class="recipe-title">
+                    ${formatName(recipe.n)}
+                    <span class="badge">совпадений: ${matched} (${Math.round(pct*100)}%)</span>
+                </div>
+                <div class="kbzu">📊 КБЖУ на 100 г: ${k.kcal} ккал | Б: ${k.prot} Ж: ${k.fat} У: ${k.carb}</div>
+                <ul class="ing-list">${recipe.i.map(([idx, g]) => {
+                    const name = ingDict[idx] || '?';
+                    const kb = getKbzuForIngredient(name);
+                    const kbStr = kb ? `(на 100г: ${kb.kcal}ккал Б${kb.prot} Ж${kb.fat} У${kb.carb})` : '';
+                    const addBtn = !kb ? `<button class="add-kbzu-btn" data-ing="${name.replace(/"/g, '&quot;')}">+ КБЖУ</button>` : '';
+                    return `<li class="ing-item">
+                        <span class="ing-name">${name} — ${g}г</span>
+                        <span class="ing-kbzu">${kbStr} ${addBtn}</span>
+                    </li>`;
+                }).join('')}</ul>
+                ${missing.length ? `<div class="missing">⚠️ Докупить: ${missing.map(([i]) => ingDict[i] || '?').join(', ')}</div>` 
+                    : '<div style="color:var(--ok);font-weight:500;margin-top:8px">✅ Все продукты есть</div>'}
+            `;
+
+            // Обработчики для кнопок «+ КБЖУ»
+            card.querySelectorAll('.add-kbzu-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const ingName = btn.dataset.ing;
+                    showKbzuForm(ingName, btn, card, recipe);
+                });
+            });
+
+            resDiv.appendChild(card);
+        });
+    }
+
+    function showKbzuForm(ingName, button, card, recipe) {
+        // Удаляем предыдущую форму, если есть
+        const oldForm = card.querySelector('.kbzu-form');
+        if (oldForm) oldForm.remove();
+
+        const form = document.createElement('div');
+        form.className = 'kbzu-form';
+        form.innerHTML = `
+            <span>${ingName} (на 100г):</span>
+            <input type="number" id="kCal" placeholder="ккал" min="0" step="any">
+            <input type="number" id="kProt" placeholder="Б" min="0" step="any">
+            <input type="number" id="kFat" placeholder="Ж" min="0" step="any">
+            <input type="number" id="kCarb" placeholder="У" min="0" step="any">
+            <button id="saveKbzu">Сохранить</button>
+            <button id="cancelKbzu">✕</button>
         `;
-        res.appendChild(el);
-      });
-    };
+        button.parentNode.after(form);
 
-    const formatName = s => String(s).replace(/-/g,' ').replace(/\d+$/,'').replace(/\b\w/g,c=>c.toUpperCase()).trim();
+        document.getElementById('saveKbzu').addEventListener('click', () => {
+            const kcal = parseFloat(document.getElementById('kCal').value) || 0;
+            const prot = parseFloat(document.getElementById('kProt').value) || 0;
+            const fat = parseFloat(document.getElementById('kFat').value) || 0;
+            const carb = parseFloat(document.getElementById('kCarb').value) || 0;
+            addCustomKbzu(ingName, { name: ingName, kcal, prot, fat, carb });
+            form.remove();
+            // Перерисовываем все результаты (можно только эту карточку)
+            const others = parseOthers(otherInput.value.trim());
+            const main = selectedMain;
+            // Восстанавливаем список рецептов после обновления
+            window.findRecipes();
+        });
 
-    const saveHistory = q => {
-      let h = JSON.parse(localStorage.getItem('rhist')||'[]');
-      h = h.filter(x=>x!==q).slice(0,10); h.unshift(q);
-      localStorage.setItem('rhist', JSON.stringify(h)); renderHistory();
-    };
-    const renderHistory = () => {
-      const el = document.getElementById('histList');
-      const h = JSON.parse(localStorage.getItem('rhist')||'[]');
-      el.innerHTML = h.length ? h.map(q=>`<span class="tag" onclick="document.getElementById('input').value='${q.replace(/'/g,"\\'")}';window.findRecipes()">${q.substring(0,25)}${q.length>25?'...':''}</span>`).join('') : '<span style="color:var(--light);font-size:13px">История пуста</span>';
-    };
+        document.getElementById('cancelKbzu').addEventListener('click', () => form.remove());
+    }
+
+    function addCustomKbzu(name, data) {
+        const idx = customKbzu.findIndex(i => norm(i.name) === norm(name));
+        if (idx >= 0) {
+            customKbzu[idx] = data;
+        } else {
+            customKbzu.push(data);
+        }
+        saveCustomKbzu();
+    }
+
+    function formatName(s) {
+        return String(s).replace(/-/g, ' ').replace(/\d+$/, '').replace(/\b\w/g, c => c.toUpperCase()).trim();
+    }
+
+    // ===================== ИСТОРИЯ =====================
+    function saveHistory(main, others) {
+        let h = JSON.parse(localStorage.getItem('rhist') || '[]');
+        const entry = `${main}|${others}`;
+        h = h.filter(x => x !== entry).slice(0, 9);
+        h.unshift(entry);
+        localStorage.setItem('rhist', JSON.stringify(h));
+        renderHistory();
+    }
+
+    function renderHistory() {
+        const el = document.getElementById('histList');
+        const h = JSON.parse(localStorage.getItem('rhist') || '[]');
+        el.innerHTML = h.length
+            ? h.map(entry => {
+                const [main, others] = entry.split('|');
+                const display = `${main} + ${others.substring(0, 20)}${others.length > 20 ? '…' : ''}`;
+                return `<span class="tag" data-main="${main.replace(/"/g, '&quot;')}" data-others="${others.replace(/"/g, '&quot;')}">${display}</span>`;
+            }).join('')
+            : '<span style="color:var(--light);font-size:13px">История пуста</span>';
+
+        // Вешаем обработчики
+        el.querySelectorAll('.tag').forEach(tag => {
+            tag.addEventListener('click', () => {
+                const main = tag.dataset.main;
+                const others = tag.dataset.others;
+                mainInput.value = main;
+                selectedMain = main;
+                otherInput.value = others;
+                window.findRecipes();
+            });
+        });
+    }
+
+    // ===================== ИНИЦИАЛИЗАЦИЯ =====================
+    loadCustomKbzu();
+
+    Promise.all([
+        fetch('./recipes.json').then(r => r.ok ? r.json() : Promise.reject('recipes.json')),
+        fetch('./kbzu.json').then(r => r.ok ? r.json() : Promise.reject('kbzu.json'))
+    ])
+    .then(([rec, kbz]) => {
+        rec = clean(rec);
+        kbz = clean(kbz);
+        if (!rec.d || !rec.r) throw new Error('Неверный формат recipes.json');
+
+        ingDict = rec.d.map(s => String(s).trim()).filter(Boolean);
+        recipes = rec.r.map(r => ({
+            n: String(r.n || '').trim(),
+            i: (r.i || []).map(([idx, g]) => [idx, g || 0])
+        }));
+        kbzuDB = (kbz || []).map(i => ({
+            name: String(i.name).trim(),
+            kcal: +i.kcal || 0,
+            prot: +i.prot || 0,
+            fat: +i.fat || 0,
+            carb: +i.carb || 0
+        }));
+
+        isReady = true;
+        btn.disabled = false;
+        btn.textContent = '🔍 Найти рецепты';
+        console.log(`✅ Загружено: ${recipes.length} рецептов, ${ingDict.length} ингредиентов`);
+        renderHistory();
+    })
+    .catch(err => {
+        resDiv.innerHTML = `<div class="empty">⚠️ Ошибка загрузки: ${err.message}</div>`;
+        console.error(err);
+    });
 
     btn.addEventListener('click', window.findRecipes);
-    document.getElementById('input').addEventListener('keydown', e => { if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();window.findRecipes();} });
-    renderHistory();
-  </script>
+    otherInput.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            window.findRecipes();
+        }
+    });
+    mainInput.addEventListener('keydown', e => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            window.findRecipes();
+        }
+    });
+</script>
 </body>
 </html>
